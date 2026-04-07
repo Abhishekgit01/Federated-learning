@@ -1,0 +1,54 @@
+{
+    "config": {
+        "num_clients": 3,
+        "rounds": 2,
+        "local_epochs": 2,
+        "batch_size": 64,
+        "lr": 0.01,
+        "dropout_rate": 0.2,
+        "iid": false,
+        "results_dir": "results"
+    },
+    "timestamp": "2026-04-07T23:26:08.877560",
+    "total_params": 612042,
+    "fed_rounds": [
+        {
+            "round": 1,
+            "participating_clients": [
+                0,
+                1,
+                2
+            ],
+            "client_losses": {
+                "0": 1.313016968838712,
+                "1": 1.4252638220787048,
+                "2": 1.1782313141093892
+            },
+            "comm_cost_mb": 14.008529663085938,
+            "test_accuracy": 0.3502
+        },
+        {
+            "round": 2,
+            "participating_clients": [
+                1,
+                2
+            ],
+            "client_losses": {
+                "1": 1.224102567957372,
+                "2": 0.9427990734956827
+            },
+            "comm_cost_mb": 9.339019775390625,
+            "test_accuracy": 0.4073
+        }
+    ],
+    "centralized_history": [
+        {
+            "epoch": 2,
+            "test_accuracy": 0.6055
+        },
+        {
+            "epoch": 4,
+            "test_accuracy": 0.6912
+        }
+    ]
+}
