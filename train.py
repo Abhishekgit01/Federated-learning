@@ -33,6 +33,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def debug_print(msg):
+    # just a quick helper I used during early debugging
+    print(f"[DEBUG] {msg}")
+
 
 def run_centralized_baseline(dataset, test_loader, config, device, file_path="results/metrics.json"):
     """
@@ -143,6 +147,8 @@ def main():
         client_updates = []
         participating_samples = []
         round_losses = {}
+        
+        # debug_print(f"Starting round {r} with global weights pulled")
 
         # Simulate dropout (randomly select clients that participate this round)
         participating_clients = []

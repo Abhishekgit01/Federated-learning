@@ -116,19 +116,16 @@ def partition_iid(dataset, num_clients, batch_size=64):
     return client_loaders, client_sample_counts
 
 
-def partition_non_iid(dataset, num_clients, batch_size=64, dominant_ratio=0.7):
+def partition_non_iid(dataset, num_clients, batch_size=64, alpha=0.5):
     """
-    Split the dataset into non-IID shards where each client predominantly
-    receives data from 2-3 classes, simulating real-world heterogeneity.
-
-    Each client gets ~70% of their data from 2 dominant classes and ~30%
-    from the remaining classes to prevent complete label absence.
+    Split the dataset into non-IID shards heavily using a Dirichlet distribution.
+    This simulates real-world heterogeneity better than just slicing the dataset.
 
     Args:
         dataset: The full training dataset.
         num_clients (int): Number of federated clients.
         batch_size (int): Batch size for each client's DataLoader.
-        dominant_ratio (float): Fraction of data from dominant classes.
+        alpha (float): Parameter for Dirichlet distribution (lower = more heterogeneous).
 
     Returns:
         dict[int, DataLoader]: Mapping from client_id to DataLoader.
@@ -137,72 +134,49 @@ def partition_non_iid(dataset, num_clients, batch_size=64, dominant_ratio=0.7):
     num_classes = 10
     targets = np.array(dataset.targets)
 
-    # Group indices by class label
-    class_indices = {
-        c: np.where(targets == c)[0].tolist() for c in range(num_classes)
-    }
+    # Setup client assignments
+    client_indices = {i: [] for i in range(num_clients)}
+    
+    # We iterate over each class and distribute its samples across clients 
+    # based on the Dirichlet distribution proportions.
+    for c in range(num_classes):
+        idx_c = np.where(targets == c)[0]
+        np.random.shuffle(idx_c)
+        
+        # Dirichlet gives a distribution of probabilities across clients for this class
+        proportions = np.random.dirichlet(np.repeat(alpha, num_clients))
+        # Ensure we don't accidentally create zero samples by normalizing properly 
+        proportions = np.array([p * (len(idx_j) < len(dataset) / num_clients) for p, idx_j in zip(proportions, client_indices.values())])
+        proportions = proportions / proportions.sum()
+        
+        # Split indices
+        proportions = (np.cumsum(proportions) * len(idx_c)).astype(int)[:-1]
+        splits = np.split(idx_c, proportions)
+        
+        for i in range(num_clients):
+            client_indices[i].extend(splits[i].tolist())
 
-    # Shuffle indices within each class
-    for c in class_indices:
-        np.random.shuffle(class_indices[c])
-
-    # Assign 2 dominant classes per client (cycling through all 10 classes)
-    dominant_classes = {}
-    for client_id in range(num_clients):
-        c1 = (client_id * 2) % num_classes
-        c2 = (client_id * 2 + 1) % num_classes
-        dominant_classes[client_id] = [c1, c2]
-
-    total_samples = len(dataset)
-    samples_per_client = total_samples // num_clients
-
-    # Track consumption pointers per class
-    class_pointers = {c: 0 for c in range(num_classes)}
-
+    # Build Loaders
     client_loaders = {}
     client_sample_counts = {}
 
     for client_id in range(num_clients):
-        client_indices = []
-        dominant = dominant_classes[client_id]
-        num_dominant = int(samples_per_client * dominant_ratio)
-        num_other = samples_per_client - num_dominant
-
-        # Collect dominant class samples (split evenly between 2 classes)
-        per_dominant_class = num_dominant // len(dominant)
-        for cls in dominant:
-            ptr = class_pointers[cls]
-            available = len(class_indices[cls]) - ptr
-            take = min(per_dominant_class, available)
-            client_indices.extend(class_indices[cls][ptr:ptr + take])
-            class_pointers[cls] += take
-
-        # Collect other class samples (spread across remaining classes)
-        other_classes = [c for c in range(num_classes) if c not in dominant]
-        per_other_class = max(1, num_other // len(other_classes))
-        for cls in other_classes:
-            ptr = class_pointers[cls]
-            available = len(class_indices[cls]) - ptr
-            take = min(per_other_class, available)
-            client_indices.extend(class_indices[cls][ptr:ptr + take])
-            class_pointers[cls] += take
-
-        np.random.shuffle(client_indices)
-        subset = Subset(dataset, client_indices)
+        np.random.shuffle(client_indices[client_id])
+        subset = Subset(dataset, client_indices[client_id])
         client_loaders[client_id] = DataLoader(
             subset, batch_size=batch_size, shuffle=True
         )
-        client_sample_counts[client_id] = len(client_indices)
+        client_sample_counts[client_id] = len(client_indices[client_id])
 
-        # Log per-client class distribution
+        # Log per-client class distribution roughly
         label_counts = {}
-        for idx in client_indices:
+        for idx in client_indices[client_id]:
             label = int(targets[idx])
             label_counts[label] = label_counts.get(label, 0) + 1
 
         logger.info(
-            "Non-IID Client %d: %d samples, dominant classes=%s, distribution=%s",
-            client_id, len(client_indices), dominant,
+            "Non-IID Client %d: %d samples, distribution=%s",
+            client_id, len(client_indices[client_id]),
             {CIFAR10_CLASSES[k]: v for k, v in sorted(label_counts.items())},
         )
 

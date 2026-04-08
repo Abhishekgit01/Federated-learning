@@ -69,7 +69,8 @@ class FedAvgServer:
             return self.get_global_weights()
 
         self.round_number += 1
-
+        
+        # TODO: maybe implement Krum or trimmed mean if there are malicious clients?
         # Total samples across all participating clients
         total_samples = sum(client_sample_counts)
 
@@ -94,16 +95,16 @@ class FedAvgServer:
         return aggregated_state
 
     @staticmethod
-    def compute_comm_cost(model, num_participating_clients):
+    def compute_comm_cost(model, n_clients):
         """
         Compute the communication cost for one round of federated learning.
 
         Each participating client downloads the global model (1x) and
-        uploads their updated model (1x), so cost = 2 * num_clients * model_size.
+        uploads their updated model (1x), so cost = 2 * n_clients * model_size.
 
         Args:
             model (nn.Module): The model being trained.
-            num_participating_clients (int): Number of clients participating
+            n_clients (int): Number of clients participating
                 in this round (excludes dropped-out clients).
 
         Returns:
@@ -113,11 +114,11 @@ class FedAvgServer:
         model_size_mb = (total_params * 4) / (1024 * 1024)  # float32
 
         # Each client: 1 download + 1 upload = 2x model size
-        round_cost_mb = 2 * num_participating_clients * model_size_mb
+        round_cost_mb = 2 * n_clients * model_size_mb
 
         logger.debug(
             "Comm cost: %d clients × 2 × %.3f MB = %.3f MB",
-            num_participating_clients, model_size_mb, round_cost_mb,
+            n_clients, model_size_mb, round_cost_mb,
         )
 
         return round_cost_mb

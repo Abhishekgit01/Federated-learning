@@ -1,82 +1,57 @@
 # Federated Learning Edge AI Simulation
 
-A PyTorch implementation of a Federated Learning system. I built this simulation to explore how we can train models on resource-constrained edge devices without compromising user data privacy.
+Hi! I'm an undergraduate student passionate about the intersection of Machine Learning and Edge Computing. This is a PyTorch implementation of a Federated Learning system that I built to explore how we can train models on resource-constrained edge devices without compromising user data privacy. 
 
-This project was developed as part of my application for the IISc Bengaluru ACM India Summer School 2026.
+This project was developed as part of my application for the **IISc Bengaluru ACM India Summer School 2026**.
 
-## Background
+## Why did I build this?
 
-In typical machine learning setups, we send huge amounts of raw data from devices to a central server. This uses up a lot of bandwidth and creates obvious privacy risks.
+I've always been fascinated by how AI can be deployed in the real world. Growing up and traveling around smaller towns in Karnataka, I noticed how spotty internet connectivity can be. We can't always rely on sending huge amounts of raw data from mobile devices to a giant central server in Bengaluru or Mumbai—it burns bandwidth, kills battery life, and honestly, creates massive privacy risks.
 
-Federated Learning flips this around. Instead of sending data to the server, we send the model to the data.
+I started reading about Federated Learning [^1] and it completely flipped things around for me. Instead of sending the data to the model, what if we send the model to the data? 
 
-To make this realistic for edge environments, I implemented three constraints in this project:
-1. **Model Size:** The EdgeCNN model has under 300K parameters so it fits into tight memory limits.
-2. **Data Heterogeneity:** Real world edge devices don't have nicely balanced datasets. I used a custom "Non-IID" partitioner to force each client to train mostly on just 2 to 3 classes.
-3. **Network Drops:** Edge devices lose connection all the time. The simulation randomly drops a percentage of clients during each round to test if the aggregator can still recover and learn.
+To make this simulation realistic for edge environments, I tried to implement constraints you'd actually see in the wild:
+- **Model Size:** The `EdgeCNN` model I built has under 300K parameters so it fits into tight memory limits.
+- **Data Heterogeneity:** Real-world edge devices don't have perfectly balanced, IID datasets (my phone sees mostly dogs, yours might see mostly cats). I used a Dirichlet distribution to force realistic Non-IID partitions.
+- **Network Drops:** Edge devices lose connection all the time in rural areas. The simulation randomly drops a percentage of clients during each round to test if the central server can still recover and learn.
 
-## System Architecture
+## How it works (The FedAvg Loop)
 
-```text
-                 [ Central Server ]
-                 |  Runs FedAvg   |
-                 | Global Weights |
-                 +-------+--------+
-                         |
-            +------------+-----------+
-            |                        |
-      (Weights Up/Down)        (Weights Up/Down) 
-            |                        |
-        [Client 1]               [Client 2] 
-      Local SGD on             Local SGD on
-      local data               local data
-      (e.g., Cats, Dogs)       (e.g., Cars, Planes)
-```
-
-## How Federated Averaging Works
-
-The Federated Averaging (FedAvg) loop works like this:
-1. The server broadcasts the current global model weights to the clients.
-2. Each client trains the model on its local dataset for a few epochs.
-3. The clients send their updated weights back. The raw data never leaves the device.
-4. The server averages these weights (adjusting based on how many samples each client trained on) to create the next global model.
+The core algorithm is Federated Averaging (FedAvg). It's incredibly elegant:
+1. The central server broadcasts the current global model weights to the participating clients.
+2. Each client trains the model on its *local dataset* for just a few epochs.
+3. The clients send their updated weights back. The raw data *never* leaves the device!
+4. The server averages these weights—adjusting based on how many samples each client trained on—to create the next global model.
 
 ## Running the Code
 
-### Setup
-
-I recommend creating a virtual environment:
+I recommend creating a virtual environment so nothing conflicts:
 ```bash
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Starting the simulation
-
-To run the training loop with default settings (5 clients, 10 rounds, 5 local epochs, 20% dropout rate, non-IID data):
-
+To run the training loop with my default settings (5 clients, 10 rounds, 5 local epochs, 20% dropout rate, non-IID data):
 ```bash
 python train.py
 ```
 
-You can tweak the parameters using arguments. For example, to run an IID benchmark with 10 clients:
+You can tweak the parameters using arguments. If you want to run an IID benchmark with 10 clients:
 ```bash
 python train.py --num_clients 10 --rounds 5 --iid
 ```
 
 ### Outputs
+The script trains both the federated model and a centralized baseline model for isolated comparison. The results are dumped into the `results/` folder, including accuracy curves, communication cost plots, and a final confusion matrix.
 
-The script trains both the federated model and a centralized baseline model for isolated comparison. The results are dumped into the `results/` folder:
-* `metrics.json`: JSON dump of all the underlying calculations.
-* `accuracy_curve.png`: Test accuracy over communication rounds.
-* `client_loss_curve.png`: How local loss drops per client.
-* `comm_cost.png`: The exact MB size of weights transferred over the network.
-* `convergence_comparison.png`: Federated accuracy vs Centralized accuracy.
-* `confusion_matrix.png`: Final evaluation heatmap.
+## Reflections
 
-## Results Summary
+### What I struggled with
+Getting the math right for the Federated Averaging was surprisingly tricky. At first, I was just taking a simple mean of the weights, which failed miserably when clients had different amounts of data! I also spent way too long tuning the Dirichlet parameter (`alpha`) to get a non-IID split that was hard enough to be realistic, but not impossible to learn from.
 
-* **Privacy:** Federated Learning keeps all training data on the edge device. The centralized baseline requires all data to be aggregated.
-* **Accuracy:** The centralized model provides a theoretical upper bound. The federated model converges slightly slower due to the Non-IID data split, but still reaches comparable accuracy given enough rounds.
-* **Bandwidth:** The communication cost is fixed to the model size (around 2.3 MB per client round) rather than scaling with the dataset size.
+### What surprised me
+Honestly, I didn't expect non-IID data to hurt accuracy this much compared to a centralized baseline. When a device only sees 2 or 3 classes, it overfits locally so fast. It was super cool to watch the global aggregation slowly correct those local biases over multiple communication rounds.
+
+---
+[^1]: McMahan, B., Moore, E., Ramage, D., Hampson, S., & y Arcas, B. A. (2017). Communication-Efficient Learning of Deep Networks from Decentralized Data. *Proceedings of the 20th International Conference on Artificial Intelligence and Statistics (AISTATS).*

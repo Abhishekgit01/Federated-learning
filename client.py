@@ -66,6 +66,8 @@ class FederatedClient:
         local_model.train()
 
         # Setup optimizer and loss
+        # tried Adam here, but SGD with momentum worked way better for this!
+        # optimizer = optim.Adam(local_model.parameters(), lr=0.001)
         optimizer = optim.SGD(
             local_model.parameters(), lr=self.lr, momentum=0.9
         )
